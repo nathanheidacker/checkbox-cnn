@@ -26,8 +26,32 @@ def train(
     criterion=None,
     optimizer=None,
 ) -> dict[str, torch.Tensor]:
+    """
+    Trains the passed model for a given number of epochs
+
+    Parameters:
+        model:
+            The model to be trained
+
+        data:
+            The training data to be iterated through in each epoch
+
+        epochs:
+            The number of epochs to train for
+
+        criterion:
+            The function used to quantify differences between model outputs and
+            ground truth labels (the models loss function)
+
+        optimizer:
+            The optimization algorithm used to update the model's parameters at
+            each training step
+
+    Returns:
+        The model's parameters after training is completed
+    """
     criterion = torch.nn.CrossEntropyLoss if criterion is None else criterion
-    optimizer = torch.optim.Adam(model.parameters)
+    optimizer = torch.optim.Adam(model.parameters) if optimizer is None else optimizer
     for epoch in tqdm(range(epochs)):
         for i, (features, labels) in enumerate(data):
             optimizer.zero_grad()
