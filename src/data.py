@@ -69,7 +69,7 @@ class CheckboxData:
         return ImageFolder(self.path, transform=transform)
 
     def _get_dataloaders(
-        self, split: float = 0.2, batch_size: int = 32
+        self, data, split: float = 0.2, batch_size: int = 32
     ) -> tuple[DataLoader, DataLoader]:
         """
         Returns dataloaders for a training and test split
@@ -82,7 +82,6 @@ class CheckboxData:
             batch_size:
                 Determines minibatch size for both loaders
         """
-        data = self._get_dataset()
         n_test = int(len(data) * split)
         n_train = len(data) - n_test
 
@@ -97,6 +96,36 @@ class CheckboxData:
         test = DataLoader(test, batch_size=batch_size, shuffle=False)
         return train, test
 
+    def load(self):
+        return self._get_dataloaders(self._get_dataset())
+
 
 if __name__ == "__main__":
+    # Instantiating the data
     data = CheckboxData()
+    train, test = data.load()
+
+    # Stats about the training set
+    batches = len(train)
+    shape = next(iter(train))[0].shape
+    train_stats = (
+        f"BATCHES: {batches} batches per epoch\n"
+        f"BATCH SIZE: {shape[0]} samples per batch\n"
+        f"IMAGES: {shape[1]} channel images of size {[x for x in shape[2:]]}\n"
+        f"SAMPLES: ~{batches * shape[0]} total samples"
+    )
+
+    # Stats about the validation set
+    batches = len(test)
+    shape = next(iter(test))[0].shape
+    test_stats = (
+        f"BATCHES: {batches} batches per epoch\n"
+        f"BATCH SIZE: {shape[0]} samples per batch\n"
+        f"IMAGES: {shape[1]} channel images of size {[x for x in shape[2:]]}\n"
+        f"SAMPLES: ~{batches * shape[0]} total samples"
+    )
+
+    print(
+        f"TRAINING STATS\n--------------\n{train_stats}\n\n"
+        f"TEST STATS\n----------\n{test_stats}"
+    )
