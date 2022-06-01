@@ -37,7 +37,11 @@ class CheckboxCNN(torch.nn.Module):
             nn.BatchNorm2d(16),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(16, 24, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(24),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(24, 32, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
@@ -46,10 +50,15 @@ class CheckboxCNN(torch.nn.Module):
         # Classification of convolved features
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Dropout(0.5),
-            nn.Linear(524288, 512),
+            nn.Dropout(0.6),
+            nn.Linear(131072, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
+            nn.Dropout(0.6),
+            nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Dropout(0.8),
             nn.Linear(512, 3),
         )
 

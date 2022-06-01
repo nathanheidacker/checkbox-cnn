@@ -69,7 +69,7 @@ class CheckboxData:
         return ImageFolder(self.path, transform=transform)
 
     def _get_dataloaders(
-        self, data, split: float = 0.2, batch_size: int = 32
+        self, data, split: float = 0.2, batch_size: int = 16
     ) -> tuple[DataLoader, DataLoader]:
         """
         Returns dataloaders for a training and test split

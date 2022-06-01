@@ -45,29 +45,30 @@ def evaluate(
         A tuple of floats, with the first index corresponding to loss and the
         second to accuracy
     """
-    model.eval()
-    criterion = nn.CrossEntropyLoss() if criterion is None else criterion
+    with torch.no_grad():
+        model.eval()
+        criterion = nn.CrossEntropyLoss() if criterion is None else criterion
 
-    loss = 0
-    correct = 0
-    cuda = torch.cuda.is_available()
+        loss = 0
+        correct = 0
+        cuda = torch.cuda.is_available()
 
-    if cuda:
-        model.cuda()
-        criterion.cuda()
-
-    for features, labels in data:
         if cuda:
-            features, labels = features.cuda(), labels.cuda()
-        preds = model(features)
-        loss += criterion(preds, labels)
-        preds = preds.argmax(dim=1)
-        correct += (preds == labels).sum()
+            model.cuda()
+            criterion.cuda()
 
-    accuracy = correct / len(data.dataset)
-    loss = loss / len(data.dataset)
+        for features, labels in data:
+            if cuda:
+                features, labels = features.cuda(), labels.cuda()
+            preds = model(features)
+            loss += criterion(preds, labels)
+            preds = preds.argmax(dim=1)
+            correct += (preds == labels).sum()
 
-    return loss.item(), accuracy.item()
+        accuracy = correct / len(data.dataset)
+        loss = loss / len(data.dataset)
+
+        return loss.item(), accuracy.item()
 
 
 def visualize():

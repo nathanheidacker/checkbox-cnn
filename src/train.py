@@ -6,6 +6,7 @@ Helper functions for training the model. Trains the model when run as __main__.
 # Standard Imports
 from __future__ import annotations
 from pathlib import Path
+import os
 
 # Third Party Imports
 from tqdm import tqdm
@@ -31,7 +32,7 @@ def train(
     epochs: int = 1,
     criterion: Optional[Callable] = None,
     optimizer: Optional[Callable] = None,
-    verbose: bool = False,
+    checkpoint: bool = False,
 ) -> dict[str, torch.Tensor]:
     """
     Trains the passed model for a given number of epochs
@@ -58,9 +59,14 @@ def train(
             The optimization algorithm used to update the model's parameters at
             each training step
 
+        checkpoint:
+            Determines whether the model should save weights every time it
+            reaches a new personal best accuracy on the validation set
+
     Returns:
         The model's parameters after training is completed
     """
+    torch.cuda.empty_cache()
     criterion = torch.nn.CrossEntropyLoss() if criterion is None else criterion
     optimizer = torch.optim.Adam(model.parameters()) if optimizer is None else optimizer
 
@@ -81,22 +87,41 @@ def train(
         loss.backward()
         optimizer.step()
 
+    weights_path = Path.joinpath(Path(os.path.abspath(__file__)).parents[1], "weights")
+    best_acc = max([int(file[:2])*0.01 for file in os.listdir(weights_path)])
+    best_loss = float("inf")
+    best_epoch = 0
+
     # Prints the validation loss and accuracy at every epoch
     if val_data is not None:
-        for epoch in range(epochs):
+        for epoch in range(1, epochs+1):
             with tqdm(
-                desc="Epoch Progress",
+                desc=f"Epoch {epoch} Progress",
                 total=len(data.dataset),
                 unit="sample",
-                ncols=150,
+                ncols=100,
+                position=0,
+                leave=True,
             ) as pbar:
                 for features, labels in data:
                     closure(features, labels)
                     pbar.update(len(labels))
 
-            val_loss, val_acc = evaluate(model, val_data)
+            val_loss, val_acc = evaluate(model, val_data, criterion=criterion)
             print(f"VAL LOSS: {val_loss:.7f} | VAL ACC: {val_acc*100:.2f}%")
-
+            if epoch > 10 and val_acc > best_acc:
+                best_acc = val_acc
+                best_loss = val_loss
+                best_epoch = epoch
+                if checkpoint:
+                    path = Path.joinpath(Path(weights_path), f"{int(val_acc * 100)}.bin")
+                    print(f"SAVING MODEL CHECKPOINT TO {path}\n")
+                    torch.save(model.state_dict(), path)
+                else:
+                    print()
+            else: print()
+            
+        print(f"BEST MODEL: {best_acc*100:2f}% ACCURACY @ EPOCH {best_epoch}")
         return model.state_dict()
 
     # No val data has a single progress bar
@@ -104,9 +129,11 @@ def train(
         desc=f"Training {epochs} epochs",
         total=len(data) * epochs,
         unit="minibatch",
-        ncols=150,
+        ncols=100,
+        position=0,
+        leave=True
     ) as pbar:
-        for epoch in range(epochs):
+        for epoch in range(1, epochs+1):
             for features, labels in data:
                 closure(features, labels)
                 pbar.update(1)
@@ -115,10 +142,11 @@ def train(
 
 
 if __name__ == "__main__":
-    model = CheckboxCNN()
-    data = CheckboxData()
-    train_data, test_data = data.load()
-    weights = train(model, train_data, test_data, epochs=5, verbose=True)
-    weight_path = Path.joinpath(data.path.parent, "weights.bin")
-    torch.save(weights, weight_path)
-    model = CheckboxCNN(weights=weight_path)
+    while True:
+        model = CheckboxCNN()
+        data = CheckboxData()
+        train_data, test_data = data.load()
+        weights = train(model, train_data, test_data, epochs=30, checkpoint=True)
+        #weight_path = Path.joinpath(data.path.parent, "weights.bin")
+        #torch.save(weights, weight_path)
+        #model = CheckboxCNN(weights=weight_path)
