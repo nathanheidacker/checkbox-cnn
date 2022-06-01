@@ -64,10 +64,17 @@ def train(
     criterion = torch.nn.CrossEntropyLoss() if criterion is None else criterion
     optimizer = torch.optim.Adam(model.parameters()) if optimizer is None else optimizer
 
+    cuda = torch.cuda.is_available()
+    if cuda:
+        model.cuda()
+        criterion.cuda()
+
     def closure(features, labels):
         """
         The function responsible for processing the minibatch
         """
+        if cuda:
+            features, labels = features.cuda(), labels.cuda()
         optimizer.zero_grad()
         predicted = model(features)
         loss = criterion(predicted, labels)

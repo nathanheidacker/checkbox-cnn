@@ -26,14 +26,39 @@ from typing import (
 
 def evaluate(
     model: nn.Module, data: DataLoader, criterion: Optional[Callable] = None
-) -> str:
-    model.eval()
-    loss = 0
-    correct = 0
+) -> tuple(float, float):
+    """
+    Evaluates the model's performance by calculating loss and accuracy on a set
+    of test data
 
+    Parameters:
+        model:
+            The trained model to evaluate
+
+        data:
+            The data to test accuracy/loss of
+
+        criterion:
+            The loss function to utilize
+
+    Returns:
+        A tuple of floats, with the first index corresponding to loss and the
+        second to accuracy
+    """
+    model.eval()
     criterion = nn.CrossEntropyLoss() if criterion is None else criterion
 
+    loss = 0
+    correct = 0
+    cuda = torch.cuda.is_available()
+
+    if cuda:
+        model.cuda()
+        criterion.cuda()
+
     for features, labels in data:
+        if cuda:
+            features, labels = features.cuda(), labels.cuda()
         preds = model(features)
         loss += criterion(preds, labels)
         preds = preds.argmax(dim=1)
