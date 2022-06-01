@@ -29,9 +29,9 @@ class CheckboxCNN(torch.nn.Module):
     """
 
     def __init__(self, weights: Optional[PathLike] = None) -> None:
-
         super().__init__()
 
+        # The convolutional forward pass
         self.conv = nn.Sequential(
             nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(16),
@@ -43,6 +43,7 @@ class CheckboxCNN(torch.nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
+        # Classification of convolved features
         self.classifier = nn.Sequential(
             nn.Flatten(),
             nn.Dropout(0.5),
@@ -52,9 +53,18 @@ class CheckboxCNN(torch.nn.Module):
             nn.Linear(512, 3),
         )
 
-        self._init_weights()
+        # Loading/initializing weights
+        if weights:
+            self.load_state_dict(torch.load(weights))
+        else:
+            self._init_weights()
 
-    def _init_weights(self):
+    def _init_weights(self) -> None:
+        """
+        Initializes the model's weights if none are provided at instantiation
+        """
+
+        # Conv2D layers use xavier normal initialization
         for layer in self.conv.children():
             if isinstance(layer, nn.Conv2d):
                 nn.init.xavier_normal_(layer.weight)
@@ -62,6 +72,7 @@ class CheckboxCNN(torch.nn.Module):
                 layer.weight.data.fill_(1)
                 layer.bias.data.zero_()
 
+        # Linear layers use xavier uniform
         for layer in self.classifier.children():
             if isinstance(layer, nn.Linear):
                 nn.init.xavier_uniform_(layer.weight)
