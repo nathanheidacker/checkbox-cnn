@@ -7,15 +7,17 @@ Helper functions for training the model. Trains the model when run as __main__.
 from __future__ import annotations
 from pathlib import Path
 import os
+import sys
 
 # Third Party Imports
 from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import StepLR
 
 # Local Imports
 from data import CheckboxData
-from model import CheckboxCNN
+from model import CheckboxCNNv1, CheckboxCNNv2
 from evaluate import evaluate
 
 # Typing:
@@ -69,6 +71,7 @@ def train(
     torch.cuda.empty_cache()
     criterion = torch.nn.CrossEntropyLoss() if criterion is None else criterion
     optimizer = torch.optim.Adam(model.parameters()) if optimizer is None else optimizer
+    scheduler = StepLR(optimizer, step_size=1, gamma=0.9)
 
     cuda = torch.cuda.is_available()
     if cuda:
@@ -106,10 +109,11 @@ def train(
                 for features, labels in data:
                     closure(features, labels)
                     pbar.update(len(labels))
+            scheduler.step()
 
             val_loss, val_acc = evaluate(model, val_data, criterion=criterion)
             print(f"VAL LOSS: {val_loss:.7f} | VAL ACC: {val_acc*100:.2f}%")
-            if epoch > 10 and val_acc > best_acc:
+            if epoch > 2 and val_acc > best_acc:
                 best_acc = val_acc
                 best_loss = val_loss
                 best_epoch = epoch
@@ -137,15 +141,16 @@ def train(
             for features, labels in data:
                 closure(features, labels)
                 pbar.update(1)
+        scheduler.step()
 
     return model.state_dict()
 
 
 if __name__ == "__main__":
     while True:
-        model = CheckboxCNN()
+        model = CheckboxCNNv2()
         data = CheckboxData()
-        train_data, test_data = data.load()
+        train_data, test_data = data.load(1000)
         weights = train(model, train_data, test_data, epochs=30, checkpoint=True)
         #weight_path = Path.joinpath(data.path.parent, "weights.bin")
         #torch.save(weights, weight_path)

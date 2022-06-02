@@ -7,6 +7,8 @@ set.
 
 # Standard imports
 from __future__ import annotations
+from pathlib import Path
+import os
 
 # Third Party Imports
 import torch
@@ -15,7 +17,7 @@ from torch.utils.data import DataLoader
 
 # Local Imports
 from data import CheckboxData
-from model import CheckboxCNN
+from model import CheckboxCNNv1
 
 # Typing
 from typing import (
@@ -78,6 +80,7 @@ def visualize():
 if __name__ == "__main__":
     data = CheckboxData()
     train, test = data.load()
-    model = CheckboxCNN("weights.bin")
+    weights_path = Path.joinpath(Path(os.path.abspath(__file__)).parents[1], "weights")
+    model = CheckboxCNNv1("weights.bin")
     loss, accuracy = evaluate(model, test)
     print(loss, accuracy)
