@@ -22,10 +22,15 @@ import matplotlib.pyplot as plt
 from typing import (
     Optional,
     Union,
-    Iterable
+    Iterable,
+    Literal,
 )
 
+ImageLike = Union[torch.Tensor, np.ndarray, list[list[list[int]]]]
+
 PathLike = Union[Path, str]
+
+Prediction = Literal["checked", "unchecked", "other"]
 
 
 class CheckboxData:
@@ -38,9 +43,6 @@ class CheckboxData:
     Attributes:
         path (Path):
             A Path object representing the root directory of the data
-
-        image_paths (dict[str, list[str]]):
-            A dictionary representing the file structure of the local data
     """
 
     def __init__(self, path: Optional[PathLike] = None) -> None:
@@ -68,9 +70,15 @@ class CheckboxData:
         transform = transforms.Compose(
             [transforms.ToTensor(), square_pad, transforms.Resize((512, 512))]
         )
+
+        # We want the transform to be accessible later
+        self.transform = transform
+
         return ImageFolder(self.path, transform=transform)
 
-    def _expand_dataset(self, image_folder: ImageFolder, n_samples: int) -> TensorDataset:
+    def _expand_dataset(
+        self, image_folder: ImageFolder, n_samples: int
+    ) -> TensorDataset:
         """
         Expands an ImageFolder dataset using random transforms such that all
         classes have n_samples
@@ -86,18 +94,30 @@ class CheckboxData:
             A TensorDataset containing the expanded data of length n_samples *
             n_classes
         """
+        # If the passed dataset is a subset, we need to access the samples differently
         samples = None
         if isinstance(image_folder, Subset):
             samples = [image_folder.dataset.samples[i] for i in image_folder.indices]
         else:
             samples = image_folder.samples
+
+        # Counting instances of each class
         class_counts = Counter([sample[1] for sample in samples])
-        if n_samples <= sum(class_counts.values()) / len(class_counts): return image_folder
-        random_transform = transforms.Compose([
-            transforms.RandomRotation((-45,45)),
-            transforms.ColorJitter(brightness=.5, hue=.3),
-            transforms.RandomPerspective(distortion_scale=0.4, p=0.7)
-        ])
+
+        # Do nothing if n_samples is too low
+        if n_samples <= sum(class_counts.values()) / len(class_counts):
+            return image_folder
+
+        # Our random transform to apply when generating new samples
+        random_transform = transforms.Compose(
+            [
+                transforms.RandomRotation((-45, 45)),
+                transforms.ColorJitter(brightness=0.5, hue=0.3),
+                transforms.RandomPerspective(distortion_scale=0.4, p=0.7),
+            ]
+        )
+
+        # Collecting original samples to be manually transformed
         X, y = [], []
         originals = defaultdict(list)
         for sample, label in image_folder:
@@ -105,6 +125,7 @@ class CheckboxData:
             X.append(sample)
             y.append(label)
 
+        # Transforming samples to create new samples until n_samples is reached
         for k, v in class_counts.items():
             i = 0
             end = len(originals[k]) - 1
@@ -122,28 +143,9 @@ class CheckboxData:
         X, y = torch.stack(X), torch.LongTensor(y)
         return TensorDataset(X, y)
 
-    def _get_dataloaders(
-        self, data: Dataset, n_samples: int, split: float, batch_size: int
-    ) -> tuple[DataLoader, DataLoader]:
-        """
-        Returns dataloaders for a training and test split
-        """
-        n_test = int(len(data) * split)
-        n_train = len(data) - n_test
-
-        # Setting a manual seed for the generator to ensure that the validation
-        # split is the same for different training runs (so long as the split
-        # proportion is constant). Allows more accurate performance evaluation
-        generator = torch.Generator().manual_seed(10)
-
-        # Splitting the data
-        train, test = random_split(data, (n_train, n_test), generator=generator)
-        train = self._expand_dataset(train, n_samples)
-        train = DataLoader(train, batch_size=batch_size, shuffle=True)
-        test = DataLoader(test, batch_size=batch_size, shuffle=False)
-        return train, test
-
-    def load(self, n_samples: int = 200, split: int = 0.2, batch_size: int = 16) -> tuple(Iterable, Iterable):
+    def load(
+        self, n_samples: int = 200, split: int = 0.2, batch_size: int = 16
+    ) -> tuple(Iterable, Iterable):
         """
         Returns dataloaders for a training and test split
 
@@ -158,8 +160,31 @@ class CheckboxData:
             batch_size:
                 Determines minibatch size for both loaders
         """
-        dataset = self._get_dataset()
-        return self._get_dataloaders(dataset, n_samples, split, batch_size)
+        # Assigning conversion dictionaries as attributes
+        data = self._get_dataset()
+        self.label_to_pred = data.class_to_idx
+        self.pred_to_label = {v: k for k, v in self.label_to_pred.items()}
+
+        # Determining test/train samples
+        n_test = int(len(data) * split)
+        n_train = len(data) - n_test
+
+        # Setting a manual seed for the generator to ensure that the validation
+        # split is the same for different training runs (so long as the split
+        # proportion is constant). Allows more accurate performance evaluation
+        generator = torch.Generator().manual_seed(10)
+
+        # Splitting the data
+        train, test = random_split(data, (n_train, n_test), generator=generator)
+
+        # Expand only the training data
+        train = self._expand_dataset(train, n_samples)
+
+        # Creating the dataloaders
+        train = DataLoader(train, batch_size=batch_size, shuffle=True)
+        test = DataLoader(test, batch_size=batch_size, shuffle=False)
+
+        return train, test
 
 
 if __name__ == "__main__":

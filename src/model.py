@@ -16,8 +16,37 @@ from data import CheckboxData, PathLike
 # Typing
 from typing import Optional
 
+class CheckboxCNN(torch.nn.Module):
+    def _init_weights(self, weights: Optional[PathLike] = None) -> None:
+        if weights:
+            loaded = None
+            if torch.cuda.is_available():
+                loaded = torch.load(weights, map_location=torch.device('cuda'))
+            else:
+                loaded = torch.load(weights, map_location=torch.device('cpu'))
+            self.load_state_dict(loaded)
+        else:
+            # Conv2D layers use xavier normal initialization
+            for layer in self.conv.children():
+                if isinstance(layer, nn.Conv2d):
+                    nn.init.xavier_normal_(layer.weight)
+                elif isinstance(layer, nn.BatchNorm2d):
+                    layer.weight.data.fill_(1)
+                    layer.bias.data.zero_()
 
-class CheckboxCNNv1(torch.nn.Module):
+            # Linear layers use xavier uniform
+            for layer in self.classifier.children():
+                if isinstance(layer, nn.Linear):
+                    nn.init.xavier_uniform_(layer.weight)
+                elif isinstance(layer, nn.BatchNorm1d):
+                    layer.weight.data.fill_(1)
+                    layer.bias.data.zero_()
+
+    def visualize(self, layer):
+        return
+
+
+class CheckboxCNNv1(CheckboxCNN):
     """
     A Convolutional Neural network designed to detect and classify the state of
     HTML checkboxes
@@ -63,37 +92,13 @@ class CheckboxCNNv1(torch.nn.Module):
         )
 
         # Loading/initializing weights
-        if weights:
-            self.load_state_dict(torch.load(weights))
-        else:
-            self._init_weights()
-
-    def _init_weights(self) -> None:
-        """
-        Initializes the model's weights if none are provided at instantiation
-        """
-
-        # Conv2D layers use xavier normal initialization
-        for layer in self.conv.children():
-            if isinstance(layer, nn.Conv2d):
-                nn.init.xavier_normal_(layer.weight)
-            elif isinstance(layer, nn.BatchNorm2d):
-                layer.weight.data.fill_(1)
-                layer.bias.data.zero_()
-
-        # Linear layers use xavier uniform
-        for layer in self.classifier.children():
-            if isinstance(layer, nn.Linear):
-                nn.init.xavier_uniform_(layer.weight)
-            elif isinstance(layer, nn.BatchNorm1d):
-                layer.weight.data.fill_(1)
-                layer.bias.data.zero_()
+        self._init_weights(weights)
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.conv(image))
 
 
-class CheckboxCNNv2(torch.nn.Module):
+class CheckboxCNNv2(CheckboxCNN):
     """
     A Convolutional Neural network designed to detect and classify the state of
     HTML checkboxes
@@ -159,31 +164,7 @@ class CheckboxCNNv2(torch.nn.Module):
         )
 
         # Loading/initializing weights
-        if weights:
-            self.load_state_dict(torch.load(weights))
-        else:
-            self._init_weights()
-
-    def _init_weights(self) -> None:
-        """
-        Initializes the model's weights if none are provided at instantiation
-        """
-
-        # Conv2D layers use xavier normal initialization
-        for layer in self.conv.children():
-            if isinstance(layer, nn.Conv2d):
-                nn.init.xavier_normal_(layer.weight)
-            elif isinstance(layer, nn.BatchNorm2d):
-                layer.weight.data.fill_(1)
-                layer.bias.data.zero_()
-
-        # Linear layers use xavier uniform
-        for layer in self.classifier.children():
-            if isinstance(layer, nn.Linear):
-                nn.init.xavier_uniform_(layer.weight)
-            elif isinstance(layer, nn.BatchNorm1d):
-                layer.weight.data.fill_(1)
-                layer.bias.data.zero_()
+        self._init_weights(weights)
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.conv(image))
