@@ -5,26 +5,40 @@ The model for classifying checked boxes
 
 # Standard Imports
 from __future__ import annotations
+from pathlib import Path
+import os
+import io
 
 # Third Party Imports
+import numpy as np
 import torch
 import torch.nn as nn
+import cv2
+import matplotlib
+import matplotlib.pyplot as plt
 
 # Local Imports
-from data import CheckboxData, PathLike
+from data import CheckboxData, PathLike, ImageLike
 
 # Typing
-from typing import Optional
+from typing import Optional, Union
 
-class CheckboxCNN(torch.nn.Module):
+
+class _CheckboxCNN(torch.nn.Module):
+    """
+    Base class for CheckboxCNN models that provides weight initialization and
+    model visualization functionality
+    """
+
     def _init_weights(self, weights: Optional[PathLike] = None) -> None:
         if weights:
             loaded = None
             if torch.cuda.is_available():
-                loaded = torch.load(weights, map_location=torch.device('cuda'))
+                loaded = torch.load(weights, map_location=torch.device("cuda"))
             else:
-                loaded = torch.load(weights, map_location=torch.device('cpu'))
+                loaded = torch.load(weights, map_location=torch.device("cpu"))
             self.load_state_dict(loaded)
+
         else:
             # Conv2D layers use xavier normal initialization
             for layer in self.conv.children():
@@ -42,14 +56,165 @@ class CheckboxCNN(torch.nn.Module):
                     layer.weight.data.fill_(1)
                     layer.bias.data.zero_()
 
-    def visualize(self, layer):
-        return
+    @staticmethod
+    def _fig_to_np(fig: plt.figure) -> np.ndarray:
+        """
+        Given a matplotlib figure, returns an np array of the image
+        """
+        with io.BytesIO() as buff:
+            fig.savefig(buff, format="raw")
+            buff.seek(0)
+            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
+        w, h = fig.canvas.get_width_height()
+        return data.reshape((int(h), int(w), -1))
+
+    @staticmethod
+    def _resize_fig(img: np.ndarray) -> plt.figure:
+        """
+        Given a numpy array, returns a plt figure with canvas size matching 
+        the array shape
+        """
+
+        # get the dimensions
+        height, width, channels = img.shape
+
+        # get the size in inches
+        dpi = 30
+        width /= dpi
+        height /= dpi
+
+        # plot and save in the same size as the original
+        fig = plt.figure(figsize=(width, height))
+
+        ax = plt.axes([0.0, 0.0, 1.0, 1.0], frameon=False, xticks=[], yticks=[])
+        ax.imshow(img, interpolation="none")
+        return fig
+
+    def visualize(
+        self,
+        layer: int,
+        out: Union[PathLike, type],
+        image: Union[ImageLike, PathLike, None] = None,
+        show: bool = False,
+        _transform: Optional[nn.Module] = None,
+    ) -> np.ndarray:
+        """
+        Visualizes a convolutional layer of the network with a matplotlib
+        output. Given an image, visualizes the image at [layer] stage of the
+        forward pass
+
+        Parameters:
+            layer:
+                The layer to be visualized
+
+            out:
+                The output path of the image
+
+            image:
+                A 3D array or filepath to an image to be visualized instead of the layer's filters themselves
+
+            show:
+                Whether or not the image should be displayed in addition to
+                being saved
+        """
+        self.eval()
+
+        # Loading transforms
+        if _transform is None:
+            data = CheckboxData()
+            data.load(1)
+            _transform = data.transform
+
+        # Ensure the layer is valid
+        layer = (layer - 1) * 4
+        modules = [x for x in self.conv[:]]
+        if not layer in range(len(modules)):
+            raise ValueError(
+                f"Not a valid convolutional layer, please select an integer value between 1 and {len(modules) / 4:.0f}"
+            )
+
+        # Visualizing an image forward pass
+        if image is not None:
+            with torch.no_grad():
+                if isinstance(image, (Path, str)):
+                    image = cv2.imread(str(image))
+                image = _transform(image).unsqueeze(0)
+                modules = nn.Sequential(*modules[: layer + 1])
+                forward = modules(image)[0]
+                n = int((forward.shape[0] ** 0.5) // 1)
+                fig, axes = plt.subplots(nrows=n, ncols=n)
+                for i, row in enumerate(axes):
+                    for j, ax in enumerate(row):
+                        ax.imshow(forward[i * 4 + j])
+                        ax.set_axis_off()
+
+                # Visualization formatting
+                fig.suptitle(f"Image forward pass at conv layer {layer / 4 + 1:.0f}")
+                fig.tight_layout()
+
+        # Visualizing the maximum activation of the filter
+        else:
+            layer = self.conv[layer]
+            print(layer.weight.shape)
+            raise NotImplementedError("This functionality has not yet been implemented")
+
+        # Outputting to path
+        if isinstance(out, (Path, str)):
+            fig.savefig(out)
+
+        # Closing the figure if not shown
+        result = self._fig_to_np(fig)
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+        return result
+
+    def report(self, out: PathLike, image: Union[ImageLike, PathLike]) -> None:
+        """
+        Creates a comprehensive visualization of this model's weights for each
+        convolutional layer, outputting the final report image to out
+
+        Parameters:
+            out:
+                The output path of the final report
+
+            image:
+                The image to be used in the report
+        """
+
+        # Getting the transform
+        data = CheckboxData()
+        data.load(1)
+        transform = data.transform
+
+        # Getting all relevant visualizations
+        n_layers = (len([x for x in self.conv]) // 4) + 1
+        """
+        map_vizs = [
+            self.visualize(i, np.ndarray, show=False, _transform=transform)
+            for i in range(1, n_layers)
+        ]
+        """
+        image_vizs = [
+            self.visualize(i, np.ndarray, image, False, transform)
+            for i in range(1, n_layers)
+        ]
+
+        # Combining into a single image
+        # map_viz = np.concatenate(map_vizs, axis=0)
+        image_viz = np.concatenate(image_vizs, axis=0)
+        # viz = np.concatenate((map_viz, image_viz), axis=1)
+
+        # Getting the resized image file, saving
+        fig = self._resize_fig(image_viz)
+        fig.savefig(out)
 
 
-class CheckboxCNNv1(CheckboxCNN):
+class CheckboxCNNv1(_CheckboxCNN):
     """
-    A Convolutional Neural network designed to detect and classify the state of
-    HTML checkboxes
+    A shallow convolutional neural network designed to detect and classify the
+    state of HTML checkboxes
 
     Parameters:
         weights:
@@ -98,10 +263,10 @@ class CheckboxCNNv1(CheckboxCNN):
         return self.classifier(self.conv(image))
 
 
-class CheckboxCNNv2(CheckboxCNN):
+class CheckboxCNNv2(_CheckboxCNN):
     """
-    A Convolutional Neural network designed to detect and classify the state of
-    HTML checkboxes
+    A deep convolutional neural network designed to detect and classify the
+    state of HTML checkboxes
 
     Parameters:
         weights:
@@ -168,3 +333,23 @@ class CheckboxCNNv2(CheckboxCNN):
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.conv(image))
+
+
+if __name__ == "__main__":
+    image_path = Path.joinpath(
+        Path(os.path.abspath(__file__)).parents[1],
+        "data/checked/4dd6ca2261e45d2b3abed5d84b55654d.png",
+    )
+    model_version = "v2"
+    if model_version == "v1":
+        weights = Path.joinpath(
+            Path(os.path.abspath(__file__)).parents[1], "weights/81v1.bin"
+        )
+        model = CheckboxCNNv1(weights)
+        model.report("v1report.png", image_path)
+    else:
+        weights = Path.joinpath(
+            Path(os.path.abspath(__file__)).parents[1], "weights/83v2.bin"
+        )
+        model = CheckboxCNNv2(weights)
+        model.report("v2report.png", image_path)
