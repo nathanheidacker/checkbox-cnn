@@ -337,6 +337,9 @@ class CheckboxCNNv2(_CheckboxCNN):
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.filterwarnings("ignore")
     args = sys.argv
     if len(args) < 2:
         raise RuntimeError(f"Please specify the model to visualize")

@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from pathlib import Path
 import os
+import sys
 
 # Third Party Imports
 import numpy as np
@@ -188,9 +189,21 @@ class CheckboxData:
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.filterwarnings("ignore")
+    args = sys.argv
+    if len(args) < 2:
+        raise RuntimeError(
+            f"Please specify the number of training samples"
+        )
+    elif len(args) > 2:
+        raise RuntimeError(f"Unrecognized arguments {args[2:]}")
+    n_samples = args[1]
+
     # Instantiating the data
     data = CheckboxData()
-    train, test = data.load()
+    train, test = data.load(n_samples)
 
     # Stats about the training set
     batches = len(train)

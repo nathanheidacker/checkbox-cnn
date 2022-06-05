@@ -150,6 +150,9 @@ def train(
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.filterwarnings("ignore")
     if not torch.cuda.is_available():
         raise RuntimeError(
             f"Training without a cuda GPU available. If a cuda GPU is should be available, ensure that you have the right version of pytorch installed."

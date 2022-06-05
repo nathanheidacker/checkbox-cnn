@@ -107,6 +107,9 @@ def infer(model: torch.nn.Module, image: Union[ImageLike, PathLike]) -> Predicti
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.filterwarnings("ignore")
     args = sys.argv
     if len(args) < 2:
         raise RuntimeError(
