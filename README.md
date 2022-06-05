@@ -79,6 +79,8 @@ checkbox-cnn/
 ### Option 1: Bash scripts <a name="2.2"></a>
 If bash is available in the testing environment, simply run `bash setup.sh` with the current working directory as the root directory of the cloned repository. This will automatically build a Docker image of the project and spin up a docker container of the image, as well as open an interactive bash terminal so that commands can be executed. If you quit the terminal, you can reopen it without recreating the Docker image by running `bash run.sh` instead.
 
+Docker containers do not have access to GPUs, so they are incapable of training. If you want to train the model yourself, please use option 3.
+
 ### Option 2: Manually create docker container <a name="2.3"></a>
 If you'd like to create a Docker environment manually, you can do so with the provided Docker file. Simply run the following command at the root directory:
 ```
@@ -93,7 +95,7 @@ docker run -it --rmi <image_name> bash
 Note that the commands exposed by the project are the scripts themselves, and as such, must be run directly (run as \__main__) rather than within an interactive python terminal. Attempting to import modules within an active python terminal will result in import errors because the imports are not relative (allowing the scripts to be run directly). Consequently, we opt for opening a bash interactive terminal instead in the `docker run` command.
 
 ### Option 3: Create a new virtual environment <a name="2.4"></a>
-If neither of the above options are available, you can create a new python virtual environment (or do so in conda), and pip install the provided requirements using `pip install -r requirements.txt`. If you use conda, ensure that pip is installed into the fresh virtual environment using `conda install pip` before running the above command.
+If neither of the above options are available, or you want to train the model yourself, you can create a new python virtual environment (or do so in conda), and pip install the provided requirements using `pip install -r requirements.txt`. If you use conda, ensure that pip is installed into the fresh virtual environment using `conda install pip` before running the above command.
 
 This project has the following dependencies:
  - tqdm
@@ -103,7 +105,13 @@ This project has the following dependencies:
  - torchvision
  - opencv-python
  
-If for any reason any of these packages fail to install, the project will not work as expected or not work at all. Please ensure that they are all properly installed prior to running any of the scripts.
+If for any reason any of these packages fail to install, the project will not work as expected or not work at all. Please ensure that they are all properly installed prior to running any of the scripts. 
+
+If you want to install a CUDA enabled version of PyTorch to train the model yourself, you must install pytorch using a different command:
+```
+pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+```
+If a CUDA enabled version of PyTorch is not installed in the environment, you will be unable to train the model even if a GPU is available.
 
 ## Testing the Project <a name="3"></a>
 If you setup the project using option 3, change your current working directory to be the root directory of the project. If you setup the project using options 1 or 2, you should be at the root directory of the project by default when spinning up the docker container. All of the commands exposed by the project should be run at this top-level directory.
@@ -184,13 +192,11 @@ Example Usage:
 ```
 python src/train.py v2
 ```
-
-Example Output:
-```
-Put the output here
-```
+Performance checkpoints will be saved inside of the weights directory as the model trains.
 
 Running the script will continuously reinitialize the model, training for 30 epochs and saving after a completed epoch if the performance on the validation set is higher than the previous best (saving a checkpoint). After 30 epochs have been trained, the model begins again from randomly initialized weights.
+
+This script will not run without access to a GPU and a CUDA enabled installation of PyTorch. If either of these conditions is not met when the script is run, a RuntimeError will be raised. If you set up the project using either of the first two methods (involving a Docker container), this script will not function.
 
 > **_NOTE:_**  This script runs indefinitely, and therefore must be manually terminated using a keyboard interrupt (CTRL-Z).
 
@@ -215,11 +221,47 @@ This command outputs an image file, "v1report.png", to the root directory. To se
 
 ### Approach <a name="4.1"></a>
 
+An precursory exploration of the data will reveal several key factors that severely limit the upper bound of our model's efficacy:
+1. Imbalanced distribution of samples among classes
+2. Inconsistent image features
+3. Small sample size
+
+While the nature of the problem is quite well suited to a convolutional neural network, these problems with the dataset limit the scope of what a CNN can accomplish. Namely, a network that is too deep (or deep at all) will have a difficult time learning anything with so little training data. The images would also need to be normalized in some fashion so that the inputs to the CNN are constant, at least in their dimensions.
+
 ### Data Preparation <a name="4.2"></a>
+
+In my first approach to building a model, I decided to primarily tackle issue 2 by applying a set of normalizing transforms to each image. Variance in image dimensions was quite high, with some images having lengths as long as 1600px. Becuase most of the images were able to conform quite neatly to a square image, I decided that images would be padded until they were square using the least amount of padding possible, such that only the smaller dimension receives any padding. Then, images are resized to a standard 512x512 before being normalized.
+
+This sequence of transformations is performed identically on both the training and validation data.
 
 ### Model Design <a name="4.3"></a>
 
+Given the limited nature of the dataset, I initially approached model design by aiming for something rather shallow. With only ~500 samples to train on, a deep network is not only susceptible to a lack of learning in deeper layers, but complete memorization of the dataset rather than real learning within the feature space. Efforts to avoid these outcomes came in the form of several micro and macro architectural decisions:
+ - We should avoid too many layers, especially fully connected layers. The network should not be too deep
+ - We should avoid an excessive amount of filters in convolutional layers; the classification problem likely doesn't require a ton of features because the objects we are trying to classify are relatively simple, both semantically and geometrically.
+ - We should use relatively high-probability dropout wherever possible to avoid overfitting and/or memorization of our very small dataset.
+ 
+Given the rather large initial image size of 512x512, I also decided to employ maxpooling more frequently than would be considered standard. I applied it to every convolutional layer, bringing the total module count per 'layer' to 4. Each convolutional layer consists of the following transformations:
+1. A convolutional layer whose number of filters is at least equal in magnitude to the number of input channels.
+    1. Filter size is always 3x3
+    2. Strides are always 1
+    3. Padding is always 1
+2. A 2D Batchnorm layer to help with model convergence
+3. A ReLU activation
+4. A 2D MaxPooling layer with a stride of 2, effectively halving the dimensions of the output
+
+This design is good for a few reasons. Firstly, The hyperparameters of the convolutional layer are tuned such that the dimensions of the output tensor (in height and width) are exactly the same as those of the input. Secondly it naturally allows for an increase in the number of filters as information in the image becomes more condensed from the pooling operations. As the information represented in each convolved feature becomes more and more dense, more filters are needed to accurately asses what information is represented in the input.
+
+The model contains 2 layer sequences; a convolutional sequence and a classifier. The first is a sequence of 3 convolutional layers (the 4 module structure laid out above), with corresponding filter counts of 16, 24, and 32 respectively. The classifier is a series of two fully connected layers with some heavy dropout inbetween each, with a final 3 neuron output on the end corresponding to the classes.
+
+Because this is a relatively simple classification problem, cross entropy loss seemed most appropriate for the loss function. Nothing fancy about this decision.
+
+For the optimizer, I chose Adam simply because it seems to be a good default option. The ability to update parameters at different rates on a per-parameter basis often leads to better performance and faster convergence speeds than more traditional optimizers like vanilla SGD.
+
+
 ### Results <a name="4.4"></a>
+
+This first attempt at the model performed quite well, all things considered. It quite consistently breaks 70% accuracy on the validation set, and peaked at 81% accuracy on the validation set over a course of around an hour of training and resetting. Because its so shallow, it trains relatively quickly and begins to encounter problems of overfitting as early as 10 epochs.
 
 ### Visualization <a name="4.5"></a>
 
