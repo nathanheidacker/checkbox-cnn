@@ -261,26 +261,56 @@ For the optimizer, I chose Adam simply because it seems to be a good default opt
 
 ### Results <a name="4.4"></a>
 
-This first attempt at the model performed quite well, all things considered. It quite consistently breaks 70% accuracy on the validation set, and peaked at 81% accuracy on the validation set over a course of around an hour of training and resetting. Because its so shallow, it trains relatively quickly and begins to encounter problems of overfitting as early as 10 epochs.
+This first attempt at the model performed quite well, all things considered. It quite consistently breaks 70% accuracy on the validation set, and peaked at 81% accuracy on the validation set over a course of around an hour of training and resetting. Because its so shallow, it trains relatively quickly and begins to encounter problems of overfitting as early as 10 epochs. However, with the limited available data this was unsurprising.
 
 ### Visualization <a name="4.5"></a>
+
+A visualization of the convolutional layers' activations on a sample image reveal that it distinguishes quite clearly between 3 classes. These distinctions are most salient in the final layer, where the proportion of activation in the checkbox vs outside of the checkbox seems to vary substantially but predictably.
 
 ![v1 conv layer visualization](readme/v1report.png)
 
 ### Improvements <a name="4.6"></a>
 
+Given that neural networks seem to become more powerful models the deeper they get (supposing that there is enough to train them), it seemed to me that the largest potential for improvement lie in the ability to sufficiently train a deeper CNN. 
+
+To improve this model, then, the largest gains would come from improvements to the data, and sebsequently improvements to the CNN's structure.
+
+There were also a few elements of the training that needed to be improved. Namely, the model seemed to oscillate around a minima rather than slowly descending towards it, indicating that Adam alone was insufficient to adjust the learning rate of the model
+
 ## CheckboxCNN v2 <a name="5"></a>
 
 ### Approach <a name="5.1"></a>
 
+Motivated by the problems described in in the conclusions of the previous model, I first sought to improve the quality of the training data. Given that the training data used for this second CNN would be so considerably improved, I greatly expanded the depth of the network, both in the convolutional sequence and the classifier.
+
 ### Data Preparation <a name="5.2"></a>
+
+Given the nature of the assignment, it seemed innapropriate to seek new samples to expand the dataset manually. Instead I opted to apply randomly determined transformations to the training data to generate novel samples. The proportions of each class would also be equalized, such that no class was inherently more likely to be output simply because it was more abundant in the training data. 
+
+To accomplish this, I sampled images from the desired class until I reached the target number of samples, applying a random transform each time. Using this methodology, one can generate arbitrarily large, balanced datasets from a finite number of samples, although the benefit conferred by continuously generating new samples from the same data seems to have harshly diminishing returns.
 
 ### Model Design <a name="5.3"></a>
 
+Now, armed with a training dataset nearly 8 times as large as that which was used to train the first model, I decided that this second implementation would have far more convolutional layers and far more filters per layer.
+
+The second implementation has 6 convolutional layers total compared to the original 3, with a filter count progression of 32, 32, 64, 64, 128, 128. The classifier is also far more complex, with twice as many fully connected layers.
+
+This implementation still used both cross entropy loss and Adam, but also used an LR step scheduler to alleviate some of the previous issues with Adam. The LR scheduler applied an exponential decay to the maximum possible learning rate after each epoch to ensure that learning rates progressively slowed down.
+
 ### Results <a name="5.4"></a>
 
+This model performed considerably better than its predecessor, although its peak performance was not much better sitting at only 83.5% validation accuracy. It was however far more likely to converge than the previous implementation, and had far more consistent, stable training. It regularly reached over 80% accuracy and saw more regular, steady jumps in performance across training epochs.
+
+While both stability and performance increased with this iteration of the model, it remains that the top level performance gains were minimal, and I can't help but feel that this was still a limitation in the data itself. While extrapolating new samples from existing data can aid in generalizing, especially in much larger datasets, there exists a point beyond which it doesn't help.
+
 ### Visualization <a name="5.5"></a>
+
+Visualizing the filters of this model, we see some of the same patterns emerging as those from the previous model, namely the three way category split across the filters. There seems to be a very distinct, consistent split among 3 different 'types' of filter: one which has high activation in the box and low activation out, one which has the opposite, and one which has relatively mild activation in both. In these filters however, especially in the last layer, there seems to be far more variance in what portions of the box are contributing to the activation, pointing towards some kind of edge detection capabilities.
 
 ![v2 conv layer visualization](readme/v2report.png)
 
 ### Improvements <a name="5.6"></a>
+
+Viewing this problem from a different paradigm entirely, it may have been a better idea to train two entirely different binary classifiers. The classes "other" and "checked" seem far more alike eachother than they are to "other". It seems instead that this problem may be appropriate for two distinct binary classifications, the first being "checkbox" or "other", and the second being "checked" or "unchecked" if the former was "checkbox". This would allow the networks to focus on the differences between the classes at a more appropriate scale, as the differences between "checkbox" and other are large and encompass the entire image, where the distinction between "checked" and "unchecked" is often the opposite.
+
+I still believe that the largest improvements to be made will come from improvements to the dataset. 500 samples is simply too small to expect any highly effective model.
