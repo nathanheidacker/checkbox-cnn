@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import io
+import sys
 
 # Third Party Imports
 import numpy as np
@@ -336,18 +337,26 @@ class CheckboxCNNv2(_CheckboxCNN):
 
 
 if __name__ == "__main__":
+    args = sys.argv
+    if len(args) < 2:
+        raise RuntimeError(f"Please specify the model to visualize")
+    elif len(args) > 2:
+        raise RuntimeError(f"Unrecognized arguments {args[2:]}")
+    elif args[1] not in ["v1", "v2"]:
+        raise RuntimeError(f"Please select 'v1' or 'v2' for the model version")
+    version = args[1]
     image_path = Path.joinpath(
         Path(os.path.abspath(__file__)).parents[1],
         "data/checked/4dd6ca2261e45d2b3abed5d84b55654d.png",
     )
-    model_version = "v2"
-    if model_version == "v1":
+
+    if version == "v1":
         weights = Path.joinpath(
             Path(os.path.abspath(__file__)).parents[1], "weights/81v1.bin"
         )
         model = CheckboxCNNv1(weights)
         model.report("v1report.png", image_path)
-    else:
+    elif version == "v2":
         weights = Path.joinpath(
             Path(os.path.abspath(__file__)).parents[1], "weights/83v2.bin"
         )

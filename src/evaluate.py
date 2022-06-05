@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import sys
-import getopt
 
 # Third Party Imports
 import cv2
@@ -108,12 +107,27 @@ def infer(model: torch.nn.Module, image: Union[ImageLike, PathLike]) -> Predicti
 
 
 if __name__ == "__main__":
+    args = sys.argv
+    if len(args) < 2:
+        raise RuntimeError(
+            f"Please specify the path of the image to infer the class of"
+        )
+    elif len(args) > 2:
+        raise RuntimeError(f"Unrecognized arguments {args[2:]}")
+
+    # Initialization
+    image_path = args[1]
     weights = Path.joinpath(
         Path(os.path.abspath(__file__)).parents[1], "weights/83v2.bin"
     )
     model = CheckboxCNNv2(weights)
-    path = Path.joinpath(
-        Path(os.path.abspath(__file__)).parents[1],
-        "data/checked/0a4cbf5a03dd31a4782e752cf1fbd5d6.png",
-    )
-    print(infer(model, path))
+
+    if image_path == "all":
+        base_path = Path.joinpath(Path(os.path.abspath(__file__)).parents[1], "tests")
+        for image_name in os.listdir(base_path):
+            image_path = Path.joinpath(base_path, image_name)
+            prediction = infer(model, image_path)
+            print(f"Predicted class of {image_name}: {prediction}")
+    else:
+        prediction = infer(model, image_path)
+        print(f"Predicted class of image at {image_path}: {prediction}")

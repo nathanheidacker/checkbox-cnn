@@ -91,13 +91,13 @@ def train(
         optimizer.step()
 
     weights_path = Path.joinpath(Path(os.path.abspath(__file__)).parents[1], "weights")
-    best_acc = max([int(file[:2])*0.01 for file in os.listdir(weights_path)])
+    best_acc = max([int(file[:2]) * 0.01 for file in os.listdir(weights_path)])
     best_loss = float("inf")
     best_epoch = 0
 
     # Prints the validation loss and accuracy at every epoch
     if val_data is not None:
-        for epoch in range(1, epochs+1):
+        for epoch in range(1, epochs + 1):
             with tqdm(
                 desc=f"Epoch {epoch} Progress",
                 total=len(data.dataset),
@@ -113,19 +113,22 @@ def train(
 
             val_loss, val_acc = evaluate(model, val_data, criterion=criterion)
             print(f"VAL LOSS: {val_loss:.7f} | VAL ACC: {val_acc*100:.2f}%")
-            if epoch > 2 and val_acc > best_acc:
+            if epoch > 5 and val_acc > best_acc:
                 best_acc = val_acc
                 best_loss = val_loss
                 best_epoch = epoch
                 if checkpoint:
-                    path = Path.joinpath(Path(weights_path), f"{int(val_acc * 100)}.bin")
+                    path = Path.joinpath(
+                        Path(weights_path), f"{int(val_acc * 100)}.bin"
+                    )
                     print(f"SAVING MODEL CHECKPOINT TO {path}\n")
                     torch.save(model.state_dict(), path)
                 else:
                     print()
-            else: print()
-            
-        print(f"BEST MODEL: {best_acc*100:2f}% ACCURACY @ EPOCH {best_epoch}")
+            else:
+                print()
+
+        print(f"BEST MODEL: {best_acc*100:2f}% ACCURACY @ EPOCH {best_epoch}\n")
         return model.state_dict()
 
     # No val data has a single progress bar
@@ -135,9 +138,9 @@ def train(
         unit="minibatch",
         ncols=100,
         position=0,
-        leave=True
+        leave=True,
     ) as pbar:
-        for epoch in range(1, epochs+1):
+        for epoch in range(1, epochs + 1):
             for features, labels in data:
                 closure(features, labels)
                 pbar.update(1)
@@ -147,11 +150,35 @@ def train(
 
 
 if __name__ == "__main__":
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            f"Training without a cuda GPU available. If a cuda GPU is should be available, ensure that you have the right version of pytorch installed."
+        )
+    args = sys.argv
+    if len(args) > 2:
+        raise RuntimeError(f"Unrecognized aruments {args[2:]}")
+    elif len(args) < 2:
+        raise RuntimeError("Please specify the model version")
+    if args[1] not in ["v1", "v2"]:
+        raise RuntimeError(f"Please select 'v1' or 'v2' for the model version")
+    version = args[1]
+
+    print(
+        "This script runs indefinitely. You must quit with a keyboard interrupt"
+        "(CTRL-Z)\nStarting Training...\n"
+    )
     while True:
-        model = CheckboxCNNv2()
-        data = CheckboxData()
-        train_data, test_data = data.load(1000)
+        if version == "v1":
+            model = CheckboxCNNv1()
+            data = CheckboxData()
+            train_data, test_data = data.load(1)
+        elif version == "v2":
+            model = CheckboxCNNv2()
+            data = CheckboxData()
+            train_data, test_data = data.load(1000)
+
+        # We dont need to save manually because checkpoint=True
         weights = train(model, train_data, test_data, epochs=30, checkpoint=True)
-        #weight_path = Path.joinpath(data.path.parent, "weights.bin")
-        #torch.save(weights, weight_path)
-        #model = CheckboxCNN(weights=weight_path)
+        # weight_path = Path.joinpath(data.path.parent, "weights.bin")
+        # torch.save(weights, weight_path)
+        # model = CheckboxCNN(weights=weight_path)
