@@ -213,8 +213,6 @@ This command outputs an image file, "v1report.png", to the root directory. To se
 
 ## CheckboxCNN v1 <a name="4"></a>
 
-
-
 ### Approach <a name="4.1"></a>
 
 ### Data Preparation <a name="4.2"></a>
