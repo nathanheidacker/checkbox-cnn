@@ -15,7 +15,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import cv2
-import matplotlib
 import matplotlib.pyplot as plt
 
 # Local Imports

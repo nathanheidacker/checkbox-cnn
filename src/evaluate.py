@@ -16,7 +16,6 @@ import cv2
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import numpy as np
 
 # Local Imports
 from data import CheckboxData, ImageLike, PathLike, Prediction

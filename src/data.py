@@ -13,11 +13,9 @@ import sys
 # Third Party Imports
 import numpy as np
 import torch
-from torch.utils.data import Dataset, TensorDataset, DataLoader, random_split, Subset
+from torch.utils.data import TensorDataset, DataLoader, random_split, Subset
 from torchvision import transforms
-from torchvision.io import read_image
 from torchvision.datasets import ImageFolder
-import matplotlib.pyplot as plt
 
 # Typing
 from typing import (
@@ -189,17 +187,16 @@ class CheckboxData:
 
 
 if __name__ == "__main__":
+    # Pytorch installation on docker is giving a weird warning
     import warnings
 
     warnings.filterwarnings("ignore")
     args = sys.argv
     if len(args) < 2:
-        raise RuntimeError(
-            f"Please specify the number of training samples"
-        )
+        raise RuntimeError(f"Please specify the number of training samples")
     elif len(args) > 2:
         raise RuntimeError(f"Unrecognized arguments {args[2:]}")
-    n_samples = args[1]
+    n_samples = int(args[1])
 
     # Instantiating the data
     data = CheckboxData()
